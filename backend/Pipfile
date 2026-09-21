@@ -1,0 +1,21 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+fastapi = "*"
+uvicorn = "*"
+google-genai = "*"
+psycopg2-binary = "*"
+sqlalchemy = "*"
+langfuse = "*"
+pydantic = "*"
+python-dotenv = "*"
+
+[dev-packages]
+pytest = "*"
+httpx = "*"
+
+[requires]
+python_version = "3.11"
