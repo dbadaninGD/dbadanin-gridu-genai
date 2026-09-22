@@ -1,0 +1,73 @@
+version: '3.8'
+
+# Run this file from the REPO ROOT: `docker-compose up -d --build`.
+# It used to live at backend/docker-compose.yml with build contexts of
+# "./backend" and "./frontend" -- those paths were being resolved relative
+# to the compose file itself, so from inside backend/ they pointed at
+# backend/backend and backend/frontend, neither of which exist. That's the
+# exact cause of the "build path ... does not exist" error. Moving this
+# file to the repo root fixes it: ./backend and ./frontend now correctly
+# resolve to the two service directories next to this file.
+
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env -- see .env.example}
+      POSTGRES_DB: ${POSTGRES_DB:-datagen_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-datagen_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-datagen_db}
+      - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT}
+      - GOOGLE_CLOUD_LOCATION=${GOOGLE_CLOUD_LOCATION:-us-central1}
+      - GENERATION_MODEL=${GENERATION_MODEL:-gemini-2.5-pro}
+      - REFINE_MODEL=${REFINE_MODEL:-gemini-2.5-flash}
+      - QUERY_MODEL=${QUERY_MODEL:-gemini-2.5-pro}
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY}
+      - LANGFUSE_HOST=${LANGFUSE_HOST:-https://cloud.langfuse.com}
+    depends_on:
+      db:
+        condition: service_healthy
+    # Maps Application Default Credentials through for Vertex AI auth.
+    # Run `gcloud auth application-default login` on the host first.
+    volumes:
+      - ${GOOGLE_APPLICATION_CREDENTIALS_DIR:-~/.config/gcloud}:/root/.config/gcloud:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+      interval: 15s
+      timeout: 5s
+      start_period: 10s
+      retries: 5
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "8501:8501"
+    environment:
+      - BACKEND_URL=http://backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:
